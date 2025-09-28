@@ -1,0 +1,18 @@
+@startuml zeromq_class
+
+enum protocol_name{
+    tcp="tcp",
+    ipc="ipc",
+    ...
+}
+
+class address_t{}
+
+address_t o-- protocol_name 
+
+tcp_address_t --|> address_t
+ipc_address_t --|> address_t
+
+class ctx_t;
+
+@enduml

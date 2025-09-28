@@ -1,0 +1,53 @@
+sequenceDiagram
+    participant Caller as SimpleServer
+
+    Note over Caller,zmq : void *context = zmq_ctx_new ();
+
+    Caller ->> zmq : create instance 
+
+    Note over zmq : zmq::initialize_network()
+    opt ifdef ZMQ_HAVE_OPENPGM
+        zmq ->> zmq : Init PGM transport.
+    end
+
+    opt ifdef ZMQ_HAVE_WINDOWS
+        zmq ->> zmq : Init  Windows sockets.
+    end
+
+    opt network init failed
+        zmq ->> Caller :  return NULL
+    end
+
+    Note over zmq : Create 0MQ context.
+    create participant ctx
+    zmq ->> ctx : new ctx
+    opt ctx
+        opt ctx->valid() is false
+        zmq ->> zmq : delete ctx
+        zmq ->> Caller :  return NULL
+
+        end
+    end
+    zmq ->> Caller :  return ctx
+
+
+    Note over Caller,ctx : void *responder = zmq_socket(context, ZMQ_REP);
+    Caller ->> zmq : zmq_socket(...)
+    zmq ->> ctx : ctx->create_socket(type_=ZMQ_REP)
+    ctx ->> ctx : start() , int and start <br>  _slots , _reaper , _io_threads
+    create participant socket_base_t
+    ctx ->> socket_base_t : create ,工厂模式创建实例
+    socket_base_t ->> socket_base_t : socket_base_t *s = NULL;
+
+    alt type_ == ZMQ_REP
+        socket_base_t ->> socket_base_t : s = new rep_t (parent_, tid_, sid_);
+    else type_ == ZMQ_REQ
+        socket_base_t ->> socket_base_t : s = new req_t (parent_, tid_, sid_);
+    else ...   
+    end
+
+    socket_base_t ->> ctx : return s 
+    ctx ->> zmq : return s
+    zmq ->> Caller : return s
+
+    
