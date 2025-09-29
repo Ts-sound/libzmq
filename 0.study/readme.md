@@ -75,8 +75,14 @@ static const char vmci[] = "vmci";
 * protocol_name : 协议类型字符串定义；
 * address : 解析地址 将 `tcp://127.0.0.1:80` 等 解析成需要的数据；
 
-
-
 ## 使用示例
 
+> simple_server.c 启动序列图
+
 ![server](./assets/puml/simple_server_sequence.mermaid)
+
+* 在首次创建 socket 时会创建 线程 `reaper` , `io_threads`
+  * `reaper` 主要通过 `zmq::epoll_t` 开启loop线程，等待事件并通过回调 `in_event ()` 来异步处理 `_mailbox` 中 cmd 指令数据；
+  * `io_threads` 默认数量为 1 ，可在启动前通过参数修改，也是通过 `zmq::epoll_t` 开启loop线程，等待IO事件（EPOLLERR,EPOLLHUP,EPOLLIN,EPOLLOUT）并 调用事件对象的 in_event()/out_event() 处理；
+* recv/send 默认都是阻塞的，实际使用肯定不止一个socket，通过poller监听多个socket 的 IN/OUT 事件再去做对应处理更合适；
+* 一些参数 keep_alive , timeout , buff_size 要根据实际socket type 和 实际场景来设置；

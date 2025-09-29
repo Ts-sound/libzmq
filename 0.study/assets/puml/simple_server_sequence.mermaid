@@ -35,7 +35,7 @@ sequenceDiagram
     Caller ->> zmq : zmq_socket(...)
     zmq ->> ctx : ctx->create_socket(type_=ZMQ_REP)
     ctx ->> ctx : start() , int and start <br>  _slots , _reaper , _io_threads
-    create participant socket_base_t
+    create participant socket_base_t as socket_base_t(req_t)
     ctx ->> socket_base_t : create ,工厂模式创建实例
     socket_base_t ->> socket_base_t : socket_base_t *s = NULL;
 
@@ -51,3 +51,44 @@ sequenceDiagram
     zmq ->> Caller : return s
 
     
+    Note over Caller,ctx : zmq_bind(responder, "tcp://*:5555");
+    Caller ->> zmq : zmq_bind(...)
+    zmq ->> socket_base_t : s->bind (addr_)
+
+    Note over socket_base_t : 根据 protocol 实例化不同的 listener
+    alt protocol == protocol_name::tcp
+        create participant tcp_listener_t
+        socket_base_t ->> tcp_listener_t : listener = new tcp_listener_t (io_thread, this, options);
+        tcp_listener_t ->> socket_base_t : listener
+        socket_base_t ->> socket_base_t : add_endpoint(static_cast<own_t *> (listener)) -> launch_child() , <br> Plug the object into the I/O thread.
+    else ...   
+    end
+
+    socket_base_t ->> zmq : return bind result
+    zmq ->> Caller : return bind result
+
+
+    Note over Caller,ctx : zmq_recv (responder, buffer, 10, 0);
+    Caller ->> zmq : zmq_recv(...)
+    zmq ->> socket_base_t : s->recv(msg_,flags_)
+    socket_base_t ->> socket_base_t : xrecv(msg) (调用子类 req_t 函数实例) , recv msg from pipe
+    socket_base_t ->> zmq : return msg , nbytes
+    opt nbytes < 0
+        zmq ->> zmq : msg close 
+        zmq ->> Caller : return -1(err) , errno
+    end 
+    zmq ->> Caller : return nbytes 
+    
+    Note over Caller,ctx : zmq_send (responder, "World", 5, 0);
+    Caller ->> zmq : zmq_send(...)
+    zmq ->> socket_base_t : s->send(msg_,flags_)
+    socket_base_t ->> socket_base_t : xsend(msg) (调用子类 req_t 函数实例) , send msg to pipe
+    socket_base_t ->> zmq : return rc
+    opt rc < 0
+        zmq ->> zmq : msg close 
+        zmq ->> Caller : return -1(err) , errno
+    end 
+    zmq ->> Caller : return rc 
+    
+
+
