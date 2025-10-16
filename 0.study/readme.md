@@ -69,11 +69,9 @@ static const char vmci[] = "vmci";
 
 ## 整体类图框架
 
-![zeromq_class](./assets/puml/zeromq_class.puml)
+![zeromq_class](./assets/puml/zeromq_class.svg){width=100%}
 
-* 以 tcp,ipc 相关文件分析，其他也是类似的；
-* protocol_name : 协议类型字符串定义；
-* address : 解析地址 将 `tcp://127.0.0.1:80` 等 解析成需要的数据；
+* 整体的结构还是比较清晰的，主要是 socket_base_t 和其子类实现（pub_t,sub_t,push_t,pull_t），其他的类都是为此服务的。
 
 ## 使用示例
 
@@ -86,3 +84,5 @@ static const char vmci[] = "vmci";
   * `io_threads` 默认数量为 1 ，可在启动前通过参数修改，也是通过 `zmq::epoll_t` 开启loop线程，等待IO事件（EPOLLERR,EPOLLHUP,EPOLLIN,EPOLLOUT）并 调用事件对象的 in_event()/out_event() 处理；
 * recv/send 默认都是阻塞的，实际使用肯定不止一个socket，通过poller监听多个socket 的 IN/OUT 事件再去做对应处理更合适；
 * 一些参数 keep_alive , timeout , buff_size 要根据实际socket type 和 实际场景来设置；
+* 实际使用可以使用zeromq 的 epoll 来同时处理多个socket 消息事件，相比于每个socket 开一个线程处理效率更高。
+* zeromq 消息传输不一定完全可靠，消息内容最好加上 发送者身份标记字段，消息id字段（自增id,UUID）等进行处理。

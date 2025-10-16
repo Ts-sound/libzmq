@@ -1,18 +1,1224 @@
-@startuml zeromq_class
+@startuml
 
-enum protocol_name{
-    tcp="tcp",
-    ipc="ipc",
-    ...
+
+
+
+
+/' Objects '/
+
+
+namespace zmq {
+	
+	class channel_t {
+		+channel_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+xhas_in() : bool
+		+xhas_out() : bool
+		+xrecv(zmq::msg_t* msg_) : int
+		+xsend(zmq::msg_t* msg_) : int
+	}
+
+	class client_t {
+		+client_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+	
+		#xhas_in() : bool
+		#xhas_out() : bool
+		
+		#xrecv(zmq::msg_t* msg_) : int
+		#xsend(zmq::msg_t* msg_) : int
+	}
+
+
+	class ctx_t {
+		+ctx_t()
+		+valid() : bool
+		+find_endpoint(const char* addr_) : endpoint_t
+		+register_endpoint(const char* addr_, const endpoint_t& endpoint_) : int
+		+set(int option_, const void* optval_, size_t optvallen_) : int
+		+shutdown() : int
+		+terminate() : int
+		-_io_threads : io_threads_t
+		-_term_mailbox : mailbox_t
+		-_pid : pid_t
+		-_sockets : sockets_t
+		-_slots : std::vector<i_mailbox*>
+		-_tag : uint32_t
+		+choose_io_thread(uint64_t affinity_) : zmq::io_thread_t*
+		+get_reaper() : zmq::object_t* {query}
+		-_reaper : zmq::reaper_t*
+		+create_socket(int type_) : zmq::socket_base_t*
+	}
+
+	class dealer_t {
+		+dealer_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		#xhas_in() : bool
+		#xhas_out() : bool
+		#recvpipe(zmq::msg_t* msg_, zmq::pipe_t** pipe_) : int
+		#sendpipe(zmq::msg_t* msg_, zmq::pipe_t** pipe_) : int
+		#xrecv(zmq::msg_t* msg_) : int
+		#xsend(zmq::msg_t* msg_) : int
+		#xsetsockopt(int option_, const void* optval_, size_t optvallen_) : int
+	}
+
+	class epoll_t {
+		+epoll_t(const thread_ctx_t& ctx_)
+		+~epoll_t()
+		-_epoll_fd : epoll_fd_t
+		+add_fd(fd_t fd_, zmq::i_poll_events* events_) : handle_t
+		+{static} max_fds() : int
+		-_retired : retired_t
+		-{static} epoll_retired_fd : static const epoll_fd_t
+		-loop() : void
+		+reset_pollin(handle_t handle_) : void
+		+reset_pollout(handle_t handle_) : void
+		+rm_fd(handle_t handle_) : void
+		+set_pollin(handle_t handle_) : void
+		+set_pollout(handle_t handle_) : void
+		+stop() : void
+	}
+
+	class fq_t {
+		+fq_t()
+		+~fq_t()
+		-_more : bool
+		+has_in() : bool
+		+recv(msg_t* msg_) : int
+		+recvpipe(msg_t* msg_, pipe_t** pipe_) : int
+		+activated(pipe_t* pipe_) : void
+		+attach(pipe_t* pipe_) : void
+		+pipe_terminated(pipe_t* pipe_) : void
+	}
+
+
+	abstract class i_mailbox {
+		+~i_mailbox()
+		+{abstract} recv(command_t* cmd_, int timeout_) : int
+		+{abstract} forked() : void
+		+{abstract} send(const command_t& cmd_) : void
+	}
+
+	class io_object_t {
+		+io_object_t(zmq::io_thread_t* io_thread_)
+		+~io_object_t()
+		#add_fd(fd_t fd_) : handle_t
+		-_poller : poller_t*
+		#add_timer(int timeout_, int id_) : void
+		#cancel_timer(int id_) : void
+		#in_event() : void
+		#out_event() : void
+		+plug(zmq::io_thread_t* io_thread_) : void
+		#reset_pollin(handle_t handle_) : void
+		#reset_pollout(handle_t handle_) : void
+		#rm_fd(handle_t handle_) : void
+		#set_pollin(handle_t handle_) : void
+		#set_pollout(handle_t handle_) : void
+		#timer_event(int id_) : void
+		+unplug() : void
+	}
+
+	class io_thread_t {
+		+io_thread_t(zmq::ctx_t* ctx_, uint32_t tid_)
+		+~io_thread_t()
+		+get_load() : int {query}
+		-_mailbox : mailbox_t
+		+get_mailbox() : mailbox_t*
+		-_poller : poller_t*
+		+get_poller() : poller_t* {query}
+		-_mailbox_handle : poller_t::handle_t
+		+in_event() : void
+		+out_event() : void
+		+process_stop() : void
+		+start() : void
+		+stop() : void
+		+timer_event(int id_) : void
+	}
+
+	class kqueue_t {
+		+kqueue_t(const thread_ctx_t& ctx_)
+		+~kqueue_t()
+		-kqueue_fd : fd_t
+		+add_fd(fd_t fd_, zmq::i_poll_events* events_) : handle_t
+		+{static} max_fds() : int
+		-pid : pid_t
+		-retired : retired_t
+		-kevent_add(fd_t fd_, short filter_, void* udata_) : void
+		-kevent_delete(fd_t fd_, short filter_) : void
+		-loop() : void
+		+reset_pollin(handle_t handle_) : void
+		+reset_pollout(handle_t handle_) : void
+		+rm_fd(handle_t handle_) : void
+		+set_pollin(handle_t handle_) : void
+		+set_pollout(handle_t handle_) : void
+		+stop() : void
+	}
+
+	class mailbox_t {
+		+mailbox_t()
+		+~mailbox_t()
+		-_active : bool
+		+valid() : bool {query}
+		-_cpipe : cpipe_t
+		+get_fd() : fd_t {query}
+		+recv(command_t* cmd_, int timeout_) : int
+		-_sync : mutex_t
+		-_signaler : signaler_t
+		+forked() : void
+		+send(const command_t& cmd_) : void
+	}
+
+	class object_t {
+		+object_t(zmq::ctx_t* ctx_, uint32_t tid_)
+		+object_t(object_t* parent_)
+		+~object_t()
+		+get_ctx() : ctx_t* {query}
+		#register_endpoint(const char* addr_, const zmq::endpoint_t& endpoint_) : int
+		#unregister_endpoint(const std::string& addr_, socket_base_t* socket_) : int
+		-_tid : uint32_t
+		+get_tid() : uint32_t {query}
+		#connect_pending(const char* addr_, zmq::socket_base_t* bind_socket_) : void
+		#destroy_socket(zmq::socket_base_t* socket_) : void
+		#log(const char* format_) : void
+		#pend_connection(const std::string& addr_, const endpoint_t& endpoint_, pipe_t** pipes_) : void
+		#process_activate_read() : void
+		#process_activate_write(uint64_t msgs_read_) : void
+		#process_attach(zmq::i_engine* engine_) : void
+		#process_bind(zmq::pipe_t* pipe_) : void
+		+process_command(const zmq::command_t& cmd_) : void
+		#process_conn_failed() : void
+		#process_hiccup(void* pipe_) : void
+		#process_own(zmq::own_t* object_) : void
+		#process_pipe_hwm(int inhwm_, int outhwm_) : void
+		#process_pipe_peer_stats(uint64_t queue_count_, zmq::own_t* socket_base_, endpoint_uri_pair_t* endpoint_pair_) : void
+		#process_pipe_stats_publish(uint64_t outbound_queue_count_, uint64_t inbound_queue_count_, endpoint_uri_pair_t* endpoint_pair_) : void
+		#process_pipe_term() : void
+		#process_pipe_term_ack() : void
+		#process_plug() : void
+		#process_reap(zmq::socket_base_t* socket_) : void
+		#process_reaped() : void
+		#process_seqnum() : void
+		#process_stop() : void
+		#process_term(int linger_) : void
+		#process_term_ack() : void
+		#process_term_endpoint(std::string* endpoint_) : void
+		#process_term_req(zmq::own_t* object_) : void
+		#send_activate_read(zmq::pipe_t* destination_) : void
+		#send_activate_write(zmq::pipe_t* destination_, uint64_t msgs_read_) : void
+		#send_attach(zmq::session_base_t* destination_, zmq::i_engine* engine_, bool inc_seqnum_) : void
+		+send_bind(zmq::own_t* destination_, zmq::pipe_t* pipe_, bool inc_seqnum_) : void
+		-send_command(const command_t& cmd_) : void
+		#send_conn_failed(zmq::session_base_t* destination_) : void
+		#send_done() : void
+		#send_hiccup(zmq::pipe_t* destination_, void* pipe_) : void
+		+send_inproc_connected(zmq::socket_base_t* socket_) : void
+		#send_own(zmq::own_t* destination_, zmq::own_t* object_) : void
+		#send_pipe_hwm(zmq::pipe_t* destination_, int inhwm_, int outhwm_) : void
+		#send_pipe_peer_stats(zmq::pipe_t* destination_, uint64_t queue_count_, zmq::own_t* socket_base, endpoint_uri_pair_t* endpoint_pair_) : void
+		#send_pipe_stats_publish(zmq::own_t* destination_, uint64_t outbound_queue_count_, uint64_t inbound_queue_count_, endpoint_uri_pair_t* endpoint_pair_) : void
+		#send_pipe_term(zmq::pipe_t* destination_) : void
+		#send_pipe_term_ack(zmq::pipe_t* destination_) : void
+		#send_plug(zmq::own_t* destination_, bool inc_seqnum_) : void
+		#send_reap(zmq::socket_base_t* socket_) : void
+		#send_reaped() : void
+		#send_stop() : void
+		#send_term(zmq::own_t* destination_, int linger_) : void
+		#send_term_ack(zmq::own_t* destination_) : void
+		#send_term_endpoint(own_t* destination_, std::string* endpoint_) : void
+		#send_term_req(zmq::own_t* destination_, zmq::own_t* object_) : void
+		+set_tid(uint32_t id_) : void
+		#unregister_endpoints(zmq::socket_base_t* socket_) : void
+		-_ctx : zmq::ctx_t* const
+		#find_endpoint(const char* addr_) : zmq::endpoint_t {query}
+		#choose_io_thread(uint64_t affinity_) : zmq::io_thread_t* {query}
+	}
+
+	class own_t {
+		+own_t(zmq::ctx_t* parent_, uint32_t tid_)
+		+own_t(zmq::io_thread_t* io_thread_, const options_t& options_)
+		#~own_t()
+		-_sent_seqnum : atomic_counter_t
+		-_terminating : bool
+		#is_terminating() : bool {query}
+		-_term_acks : int
+		#options : options_t
+		-_owner : own_t*
+		-_owned : owned_t
+		-_processed_seqnum : uint64_t
+		-check_term_acks() : void
+		+inc_seqnum() : void
+		#launch_child(own_t* object_) : void
+		#process_destroy() : void
+		-process_own(own_t* object_) : void
+		-process_seqnum() : void
+		#process_term(int linger_) : void
+		-process_term_ack() : void
+		-process_term_req(own_t* object_) : void
+		+register_term_acks(int count_) : void
+		-set_owner(own_t* owner_) : void
+		#term_child(own_t* object_) : void
+		#terminate() : void
+		+unregister_term_ack() : void
+	}
+
+	class pair_t {
+		+pair_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~pair_t()
+		+xhas_in() : bool
+		+xhas_out() : bool
+		+xrecv(zmq::msg_t* msg_) : int
+		+xsend(zmq::msg_t* msg_) : int
+		+xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+		+xpipe_terminated(zmq::pipe_t* pipe_) : void
+		+xread_activated(zmq::pipe_t* pipe_) : void
+		+xwrite_activated(zmq::pipe_t* pipe_) : void
+		-_pipe : zmq::pipe_t*
+	}
+
+	class peer_t {
+		+peer_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		-_peer_last_routing_id : uint32_t
+		+connect_peer(const char* endpoint_uri_) : uint32_t
+		+xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+	}
+
+	class pipe_t {
+		-pipe_t(object_t* parent_, upipe_t* inpipe_, upipe_t* outpipe_, int inhwm_, int outhwm_, bool conflate_)
+		-~pipe_t()
+		-_delay : bool
+		-_in_active : bool
+		-_out_active : bool
+		+check_hwm() : bool {query}
+		+check_read() : bool
+		+check_write() : bool
+		-{static} is_delimiter(const msg_t& msg_) : bool
+		+read(msg_t* msg_) : bool
+		+write(const msg_t* msg_) : bool
+		-_conflate : const bool
+		-_endpoint_pair : endpoint_uri_pair_t
+		+get_endpoint_pair() : endpoint_uri_pair_t& {query}
+		-_state : enum
+		-_sink : i_pipe_events*
+		-_hwm : int
+		-_in_hwm_boost : int
+		-_lwm : int
+		-_out_hwm_boost : int
+		-_server_socket_routing_id : int
+		-{static} compute_lwm(int hwm_) : int
+		-pipepair(zmq::object_t* parents_, zmq::pipe_t* pipes_, const int hwms_, const bool conflate_) : int
+		-_disconnect_msg : msg_t
+		-_peer : pipe_t*
+		+get_server_socket_routing_id() : uint32_t {query}
+		-_msgs_read : uint64_t
+		-_msgs_written : uint64_t
+		-_peers_msgs_read : uint64_t
+		-_in_pipe : upipe_t*
+		-_out_pipe : upipe_t*
+		+flush() : void
+		+hiccup() : void
+		-process_activate_read() : void
+		-process_activate_write(uint64_t msgs_read_) : void
+		-process_delimiter() : void
+		-process_hiccup(void* pipe_) : void
+		-process_pipe_hwm(int inhwm_, int outhwm_) : void
+		-process_pipe_peer_stats(uint64_t queue_count_, own_t* socket_base_, endpoint_uri_pair_t* endpoint_pair_) : void
+		-process_pipe_term() : void
+		-process_pipe_term_ack() : void
+		+rollback() : void {query}
+		+send_disconnect_msg() : void
+		+send_hiccup_msg(const std::vector<unsigned char>& hiccup_) : void
+		+send_hwms_to_peer(int inhwm_, int outhwm_) : void
+		+send_stats_to_peer(own_t* socket_base_) : void
+		+set_disconnect_msg(const std::vector<unsigned char>& disconnect_) : void
+		+set_endpoint_pair(endpoint_uri_pair_t endpoint_pair_) : void
+		+set_event_sink(i_pipe_events* sink_) : void
+		+set_hwms(int inhwm_, int outhwm_) : void
+		+set_hwms_boost(int inhwmboost_, int outhwmboost_) : void
+		+set_nodelay() : void
+		-set_peer(pipe_t* peer_) : void
+		+set_server_socket_routing_id(uint32_t server_socket_routing_id_) : void
+		+terminate(bool delay_) : void
+	}
+
+	class poll_t {
+		+poll_t(const thread_ctx_t& ctx_)
+		+~poll_t()
+		-retired : bool
+		-fd_table : fd_table_t
+		+add_fd(fd_t fd_, zmq::i_poll_events* events_) : handle_t
+		+{static} max_fds() : int
+		-pollset : pollset_t
+		-cleanup_retired() : void
+		-loop() : void
+		+reset_pollin(handle_t handle_) : void
+		+reset_pollout(handle_t handle_) : void
+		+rm_fd(handle_t handle_) : void
+		+set_pollin(handle_t handle_) : void
+		+set_pollout(handle_t handle_) : void
+		+stop() : void
+	}
+
+	class poller_base_t {
+		+poller_base_t()
+		+~poller_base_t()
+		-_load : atomic_counter_t
+		+get_load() : int {query}
+		-_timers : timers_t
+		#execute_timers() : uint64_t
+		+add_timer(int timeout_, zmq::i_poll_events* sink_, int id_) : void
+		#adjust_load(int amount_) : void
+		+cancel_timer(zmq::i_poll_events* sink_, int id_) : void
+	}
+
+	class pub_t {
+		+pub_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~pub_t()
+		+xhas_in() : bool
+		+xrecv(zmq::msg_t* msg_) : int
+		+xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+	}
+
+	class pull_t {
+		+pull_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~pull_t()
+		#xhas_in() : bool
+		-_fq : fq_t
+		#xrecv(zmq::msg_t* msg_) : int
+		#xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+		#xpipe_terminated(zmq::pipe_t* pipe_) : void
+		#xread_activated(zmq::pipe_t* pipe_) : void
+	}
+
+	class push_t {
+		+push_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~push_t()
+		#xhas_out() : bool
+		#xsend(zmq::msg_t* msg_) : int
+		-_lb : lb_t
+		#xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+		#xpipe_terminated(zmq::pipe_t* pipe_) : void
+		#xwrite_activated(zmq::pipe_t* pipe_) : void
+	}
+
+	class reaper_t {
+		+reaper_t(zmq::ctx_t* ctx_, uint32_t tid_)
+		+~reaper_t()
+		-_terminating : bool
+		-_sockets : int
+		-_mailbox : mailbox_t
+		+get_mailbox() : mailbox_t*
+		-_pid : pid_t
+		-_poller : poller_t*
+		-_mailbox_handle : poller_t::handle_t
+		+in_event() : void
+		+out_event() : void
+		-process_reap(zmq::socket_base_t* socket_) : void
+		-process_reaped() : void
+		-process_stop() : void
+		+start() : void
+		+stop() : void
+		+timer_event(int id_) : void
+	}
+
+	class rep_t {
+		+rep_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~rep_t()
+		-_request_begins : bool
+		-_sending_reply : bool
+		+xhas_in() : bool
+		+xhas_out() : bool
+		+xrecv(zmq::msg_t* msg_) : int
+		+xsend(zmq::msg_t* msg_) : int
+	}
+
+	class req_t {
+		+req_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~req_t()
+		-_message_begins : bool
+		-_receiving_reply : bool
+		-_request_id_frames_enabled : bool
+		-_strict : bool
+		+xhas_in() : bool
+		+xhas_out() : bool
+		#recv_reply_pipe(zmq::msg_t* msg_) : int
+		+xrecv(zmq::msg_t* msg_) : int
+		+xsend(zmq::msg_t* msg_) : int
+		+xsetsockopt(int option_, const void* optval_, size_t optvallen_) : int
+		-_request_id : uint32_t
+		+xpipe_terminated(zmq::pipe_t* pipe_) : void
+		-_reply_pipe : zmq::pipe_t*
+	}
+
+	class router_t {
+		+router_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~router_t()
+		-_handover : bool
+		-_mandatory : bool
+		-_more_in : bool
+		-_more_out : bool
+		-_prefetched : bool
+		-_probe_router : bool
+		-_raw_socket : bool
+		-_routing_id_sent : bool
+		-_terminate_current_in : bool
+		-identify_peer(pipe_t* pipe_, bool locally_initiated_) : bool
+		+xhas_in() : bool
+		+xhas_out() : bool
+		-_fq : fq_t
+		+get_peer_state(const void* routing_id_, size_t routing_id_size_) : int {query}
+		#rollback() : int
+		+xrecv(zmq::msg_t* msg_) : int
+		+xsend(zmq::msg_t* msg_) : int
+		+xsetsockopt(int option_, const void* optval_, size_t optvallen_) : int
+		-_prefetched_id : msg_t
+		-_prefetched_msg : msg_t
+		-_anonymous_pipes : std::set<pipe_t*>
+		-_next_integral_routing_id : uint32_t
+		+xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+		+xpipe_terminated(zmq::pipe_t* pipe_) : void
+		+xread_activated(zmq::pipe_t* pipe_) : void
+		-_current_in : zmq::pipe_t*
+		-_current_out : zmq::pipe_t*
+	}
+
+	class server_t {
+		+server_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~server_t()
+		+xhas_in() : bool
+		+xhas_out() : bool
+		-_fq : fq_t
+		+xrecv(zmq::msg_t* msg_) : int
+		+xsend(zmq::msg_t* msg_) : int
+		-_out_pipes : out_pipes_t
+		-_next_routing_id : uint32_t
+		+xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+		+xpipe_terminated(zmq::pipe_t* pipe_) : void
+		+xread_activated(zmq::pipe_t* pipe_) : void
+		+xwrite_activated(zmq::pipe_t* pipe_) : void
+	}
+
+	class session_base_t {
+		#session_base_t(zmq::io_thread_t* io_thread_, bool active_, zmq::socket_base_t* socket_, const options_t& options_, address_t* addr_)
+		#~session_base_t()
+		-_addr : address_t*
+		-_has_linger_timer : bool
+		-_incomplete_in : bool
+		-_pending : bool
+		+zap_enabled() : bool {query}
+		-_active : const bool
+		-_wss_hostname : const std::string
+		+get_endpoint() : endpoint_uri_pair_t& {query}
+		+pull_msg(msg_t* msg_) : int
+		+push_msg(msg_t* msg_) : int
+		+read_zap_msg(msg_t* msg_) : int
+		+write_zap_msg(msg_t* msg_) : int
+		+zap_connect() : int
+		+{static} create(zmq::io_thread_t* io_thread_, bool active_, zmq::socket_base_t* socket_, const options_t& options_, address_t* addr_) : session_base_t*
+		+get_socket() : socket_base_t* {query}
+		-_terminating_pipes : std::set<pipe_t*>
+		+attach_pipe(zmq::pipe_t* pipe_) : void
+		-clean_pipes() : void
+		+engine_error(bool handshaked_, zmq::i_engine::error_reason_t reason_) : void
+		+engine_ready() : void
+		+flush() : void
+		+hiccuped(zmq::pipe_t* pipe_) : void
+		+pipe_terminated(zmq::pipe_t* pipe_) : void
+		-process_attach(zmq::i_engine* engine_) : void
+		-process_conn_failed() : void
+		-process_plug() : void
+		-process_term(int linger_) : void
+		+read_activated(zmq::pipe_t* pipe_) : void
+		-reconnect() : void
+		+reset() : void
+		+rollback() : void
+		-start_connecting(bool wait_) : void
+		-timer_event(int id_) : void
+		+write_activated(zmq::pipe_t* pipe_) : void
+		-_engine : zmq::i_engine*
+		-_io_thread : zmq::io_thread_t*
+		-_pipe : zmq::pipe_t*
+		-_zap_pipe : zmq::pipe_t*
+		-_socket : zmq::socket_base_t*
+	}
+
+	class signaler_t {
+		+signaler_t()
+		+~signaler_t()
+		+valid() : bool {query}
+		-_r : fd_t
+		-_w : fd_t
+		+get_fd() : fd_t {query}
+		+recv_failable() : int
+		+wait(int timeout_) : int {query}
+		-pid : pid_t
+		-close_internal() : void
+		+forked() : void
+		+recv() : void
+		+send() : void
+	}
+
+	abstract class socket_base_t {
+		-ZMQ_NON_COPYABLE_NOR_MOVABLE(socket_base_t)
+		#socket_base_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_, bool thread_safe_)
+		#~socket_base_t()
+		-_ctx_terminated : bool
+		-_destroyed : bool
+		-_rcvmore : bool
+		+check_tag() : bool {query}
+		+has_in() : bool
+		+has_out() : bool
+		+is_disconnected() : bool {query}
+		+is_thread_safe() : bool {query}
+		#xhas_in() : bool
+		#xhas_out() : bool
+		-_clock : clock_t
+		-_thread_safe : const bool
+		-_endpoints : endpoints_t
+		-_mailbox : i_mailbox*
+		+get_mailbox() : i_mailbox* {query}
+		-_inprocs : inprocs_t
+		-_ticks : int
+		+bind(const char* endpoint_uri_) : int
+		-check_protocol(const std::string& protocol_) : int {query}
+		+close() : int
+		+connect(const char* endpoint_uri_) : int
+		#connect_internal(const char* endpoint_uri_) : int
+		+get_peer_state(const void* routing_id_, size_t routing_id_size_) : int {query}
+		+getsockopt(int option_, void* optval_, size_t* optvallen_) : int
+		+join(const char* group_) : int
+		+leave(const char* group_) : int
+		+monitor(const char* endpoint_, uint64_t events_, int event_version_, int type_) : int
+		-{static} parse_uri(const char* uri_, std::string& protocol_, std::string& path_) : int
+		-process_commands(int timeout_, bool throttle_) : int
+		+query_pipes_stats() : int
+		+recv(zmq::msg_t* msg_, int flags_) : int
+		+send(zmq::msg_t* msg_, int flags_) : int
+		+setsockopt(int option_, const void* optval_, size_t optvallen_) : int
+		+term_endpoint(const char* endpoint_uri_) : int
+		#xgetsockopt(int option_, void* optval_, size_t* optvallen_) : int
+		#xjoin(const char* group_) : int
+		#xleave(const char* group_) : int
+		#xrecv(zmq::msg_t* msg_) : int
+		#xsend(zmq::msg_t* msg_) : int
+		#xsetsockopt(int option_, const void* optval_, size_t optvallen_) : int
+		-_monitor_events : int64_t
+		-_monitor_sync : mutex_t
+		#_sync : mutex_t
+		-_pipes : pipes_t
+		-_poller : poller_t*
+		-_handle : poller_t::handle_t
+		-_reaper_signaler : signaler_t*
+		+{static} create(int type_, zmq::ctx_t* parent_, uint32_t tid_, int sid_) : socket_base_t*
+		-_last_endpoint : std::string
+		-resolve_tcp_addr(std::string endpoint_uri_, const char* tcp_address_) : std::string
+		-_tag : uint32_t
+		-_last_tsc : uint64_t
+		-add_endpoint(const endpoint_uri_pair_t& endpoint_pair_, own_t* endpoint_, pipe_t* pipe_) : void
+		+add_signaler(signaler_t* s_) : void
+		-attach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+		-check_destroy() : void
+		-event(const endpoint_uri_pair_t& endpoint_uri_pair_, uint64_t values_, uint64_t values_count_, uint64_t type_) : void
+		+event_accept_failed(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_accepted(const endpoint_uri_pair_t& endpoint_uri_pair_, zmq::fd_t fd_) : void
+		+event_bind_failed(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_close_failed(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_closed(const endpoint_uri_pair_t& endpoint_uri_pair_, zmq::fd_t fd_) : void
+		+event_connect_delayed(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_connect_retried(const endpoint_uri_pair_t& endpoint_uri_pair_, int interval_) : void
+		+event_connected(const endpoint_uri_pair_t& endpoint_uri_pair_, zmq::fd_t fd_) : void
+		+event_disconnected(const endpoint_uri_pair_t& endpoint_uri_pair_, zmq::fd_t fd_) : void
+		+event_handshake_failed_auth(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_handshake_failed_no_detail(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_handshake_failed_protocol(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_handshake_succeeded(const endpoint_uri_pair_t& endpoint_uri_pair_, int err_) : void
+		+event_listening(const endpoint_uri_pair_t& endpoint_uri_pair_, zmq::fd_t fd_) : void
+		-extract_flags(const msg_t* msg_) : void
+		+hiccuped(pipe_t* pipe_) : void
+		+in_event() : void
+		+lock() : void
+		-monitor_event(uint64_t event_, const uint64_t values_, uint64_t values_count_, const endpoint_uri_pair_t& endpoint_uri_pair_) : void {query}
+		+out_event() : void
+		+pipe_terminated(pipe_t* pipe_) : void
+		-process_bind(zmq::pipe_t* pipe_) : void
+		#process_destroy() : void
+		-process_pipe_stats_publish(uint64_t outbound_queue_count_, uint64_t inbound_queue_count_, endpoint_uri_pair_t* endpoint_pair_) : void
+		-process_stop() : void
+		-process_term(int linger_) : void
+		-process_term_endpoint(std::string* endpoint_) : void
+		+read_activated(pipe_t* pipe_) : void
+		+remove_signaler(signaler_t* s_) : void
+		+start_reaping(poller_t* poller_) : void
+		+stop() : void
+		-stop_monitor(bool send_monitor_stopped_event_) : void
+		+timer_event(int id_) : void
+		+unlock() : void
+		-update_pipe_options(int option_) : void
+		+write_activated(pipe_t* pipe_) : void
+		#{abstract} xattach_pipe(zmq::pipe_t* pipe_, bool subscribe_to_all_, bool locally_initiated_) : void
+		#xhiccuped(pipe_t* pipe_) : void
+		#{abstract} xpipe_terminated(pipe_t* pipe_) : void
+		#xread_activated(pipe_t* pipe_) : void
+		#xwrite_activated(pipe_t* pipe_) : void
+		-_monitor_socket : void*
+	}
+
+	class socket_poller_t {
+		+socket_poller_t()
+		+~socket_poller_t()
+		-_need_rebuild : bool
+		-_use_signaler : bool
+		+check_tag() : bool {query}
+		-{static} is_fd(const item_t& item, fd_t fd_) : bool
+		-{static} is_socket(const item_t& item, const socket_base_t* socket_) : bool
+		-_pollset_size : int
+		+add(socket_base_t* socket_, void* user_data_, short events_) : int
+		+add_fd(fd_t fd_, void* user_data_, short events_) : int
+		-{static} adjust_timeout(zmq::clock_t& clock_, long timeout_, uint64_t& now_, uint64_t& end_, bool& first_pass_) : int
+		-check_events(zmq::socket_poller_t::event_t* events_, int n_events_) : int
+		-check_events(zmq::socket_poller_t::event_t* events_, int n_events_, fd_set& inset_, fd_set& outset_, fd_set& errset_) : int
+		+modify(const socket_base_t* socket_, short events_) : int
+		+modify_fd(fd_t fd_, short events_) : int
+		-rebuild() : int
+		+remove(socket_base_t* socket_) : int
+		+remove_fd(fd_t fd_) : int
+		+signaler_fd(fd_t* fd_) : int {query}
+		+size() : int {query}
+		+wait(event_t* events_, int n_events_, long timeout_) : int
+		-_items : items_t
+		-_pollfds : pollfd*
+		-_pollset_err : resizable_optimized_fd_set_t
+		-_pollset_in : resizable_optimized_fd_set_t
+		-_pollset_out : resizable_optimized_fd_set_t
+		-_signaler : signaler_t*
+		-_tag : uint32_t
+		-{static} zero_trail_events(zmq::socket_poller_t::event_t* events_, int n_events_, int found_) : void
+		-_max_fd : zmq::fd_t
+	}
+
+	class socks_connecter_t {
+		+socks_connecter_t(zmq::io_thread_t* io_thread_, zmq::session_base_t* session_, const options_t& options_, address_t* addr_, address_t* proxy_addr_, bool delayed_start_)
+		+~socks_connecter_t()
+		-_proxy_addr : address_t*
+		-_auth_method : int
+		-_status : int
+		-connect_to_proxy() : int
+		-open() : int
+		-{static} parse_address(const std::string& address_, std::string& hostname_, uint16_t& port_) : int
+		-{static} process_server_response(const socks_choice_t& response_) : int
+		-{static} process_server_response(const socks_response_t& response_) : int
+		-{static} process_server_response(const socks_auth_response_t& response_) : int
+		-_auth_response_decoder : socks_auth_response_decoder_t
+		-_basic_auth_request_encoder : socks_basic_auth_request_encoder_t
+		-_choice_decoder : socks_choice_decoder_t
+		-_greeting_encoder : socks_greeting_encoder_t
+		-_request_encoder : socks_request_encoder_t
+		-_response_decoder : socks_response_decoder_t
+		-_auth_password : std::string
+		-_auth_username : std::string
+		-error() : void
+		-in_event() : void
+		-out_event() : void
+		+set_auth_method_basic(const std::string& username, const std::string& password) : void
+		+set_auth_method_none() : void
+		-start_connecting() : void
+		-check_proxy_connection() : zmq::fd_t {query}
+	}
+
+
+	class sub_t {
+		+sub_t(zmq::ctx_t* parent_, uint32_t tid_, int sid_)
+		+~sub_t()
+		#xhas_out() : bool
+		#xsend(zmq::msg_t* msg_) : int
+		#xsetsockopt(int option_, const void* optval_, size_t optvallen_) : int
+	}
+
+	class tcp_address_mask_t {
+		+tcp_address_mask_t()
+		+match_address(const struct sockaddr* ss_, socklen_t ss_len_) : bool {query}
+		-_address_mask : int
+		+resolve(const char* name_, bool ipv6_) : int
+		-_network_address : ip_addr_t
+	}
+
+	class tcp_address_t {
+		+tcp_address_t()
+		+tcp_address_t(const sockaddr* sa_, socklen_t sa_len_)
+		-_has_src_addr : bool
+		+has_src_addr() : bool {query}
+		+resolve(const char* name_, bool local_, bool ipv6_) : int
+		+to_string(std::string& addr_) : int {query}
+		-_address : ip_addr_t
+		-_source_address : ip_addr_t
+		+family() : sa_family_t {query}
+		+addr() : sockaddr* {query}
+		+src_addr() : sockaddr* {query}
+		+addrlen() : socklen_t {query}
+		+src_addrlen() : socklen_t {query}
+		+family() : unsigned short {query}
+	}
+
+	class tcp_listener_t {
+		+tcp_listener_t(zmq::io_thread_t* io_thread_, zmq::socket_base_t* socket_, const options_t& options_)
+		-accept() : fd_t
+		-create_socket(const char* addr_) : int
+		+set_local_address(const char* addr_) : int
+		#get_socket_name(fd_t fd_, socket_end_t socket_end_) : std::string {query}
+		-_address : tcp_address_t
+		-in_event() : void
+	}
+
+	class thread_ctx_t {
+		+thread_ctx_t()
+		-_thread_priority : int
+		-_thread_sched_policy : int
+		+get(int option_, void* optval_, const size_t* optvallen_) : int
+		+set(int option_, const void* optval_, size_t optvallen_) : int
+		#_opt_sync : mutex_t
+		-_thread_affinity_cpus : std::set<int>
+		-_thread_name_prefix : std::string
+		+start_thread(thread_t& thread_, thread_fn* tfn_, void* arg_, const char* name_) : void {query}
+	}
+
+	class thread_t {
+		+thread_t()
+		+~thread_t()
+		-_thread_id : DWORD
+		-_descriptor : HANDLE
+		-_started : bool
+		+get_started() : bool {query}
+		+is_current_thread() : bool {query}
+		+_name : char[]
+		-_descriptor : int
+		-_thread_priority : int
+		-_thread_sched_policy : int
+		-_descriptor : pthread_t
+		-_thread_affinity_cpus : std::set<int>
+		+_tfn : thread_fn*
+		-_thread_id : unsigned int
+		+applySchedulingParameters() : void
+		+applyThreadName() : void
+		+setSchedulingParameters(int priority_, int scheduling_policy_, const std::set<int>& affinity_cpus_) : void
+		+start(thread_fn* tfn_, void* arg_, const char* name_) : void
+		+stop() : void
+		+_arg : void*
+	}
+
+	class timers_t {
+		+timers_t()
+		+~timers_t()
+		+check_tag() : bool {query}
+		-_cancelled_timers : cancelled_timers_t
+		-_clock : clock_t
+		-_next_timer_id : int
+		+add(size_t interval_, timers_timer_fn handler_, void* arg_) : int
+		+cancel(int timer_id_) : int
+		+execute() : int
+		+reset(int timer_id_) : int
+		+set_interval(int timer_id_, size_t interval_) : int
+		+timeout() : long
+		-_timers : timersmap_t
+		-_tag : uint32_t
+	}
+
+	class udp_address_t {
+		+udp_address_t()
+		+~udp_address_t()
+		-_is_multicast : bool
+		+is_mcast() : bool {query}
+		-_bind_interface : int
+		+bind_if() : int {query}
+		+family() : int {query}
+		+resolve(const char* name_, bool bind_, bool ipv6_) : int
+		+to_string(std::string& addr_) : int
+		-_bind_address : ip_addr_t
+		-_target_address : ip_addr_t
+		+bind_addr() : ip_addr_t* {query}
+		+target_addr() : ip_addr_t* {query}
+		-_address : std::string
+	}
+
+	abstract class worker_poller_base_t {
+		+worker_poller_base_t(const thread_ctx_t& ctx_)
+		-_ctx : const thread_ctx_t&
+		-_worker : thread_t
+		#check_thread() : void {query}
+		-{abstract} loop() : void
+		+start(const char* name) : void
+		#stop_worker() : void
+		-{static} worker_routine(void* arg_) : void
+	}
+
+
+
+	class address_t {
+		+address_t(const std::string& protocol_, const std::string& address_, ctx_t* parent_)
+		+~address_t()
+		+resolved : <anon-union-1>
+		+address : const std::string
+		+protocol : const std::string
+		+parent : ctx_t* const
+		+to_string(std::string& addr_) : int {query}
+	}
+
+
+	abstract class i_engine {
+		+~i_engine()
+		+{abstract} has_handshake_stage() : bool
+		+{abstract} restart_input() : bool
+		+{abstract} get_endpoint() : endpoint_uri_pair_t& {query}
+		+{abstract} plug(zmq::io_thread_t* io_thread_, class session_base_t* session_) : void
+		+{abstract} restart_output() : void
+		+{abstract} terminate() : void
+		+{abstract} zap_msg_available() : void
+	}
+
+	abstract class i_pipe_events {
+		+~i_pipe_events()
+		+{abstract} hiccuped(zmq::pipe_t* pipe_) : void
+		+{abstract} pipe_terminated(zmq::pipe_t* pipe_) : void
+		+{abstract} read_activated(zmq::pipe_t* pipe_) : void
+		+{abstract} write_activated(zmq::pipe_t* pipe_) : void
+	}
+
+	abstract class i_poll_events {
+		+~i_poll_events()
+		+{abstract} in_event() : void
+		+{abstract} out_event() : void
+		+{abstract} timer_event(int id_) : void
+	}
+
+	class item_t {
+		+fd : fd_t
+		+pollfd_index : int
+		+events : short
+		+socket : socket_base_t*
+		+user_data : void*
+	}
+
+	class ip_addr_t {
+		+is_multicast() : bool {query}
+		+family() : int {query}
+		+{static} any(int family_) : ip_addr_t
+		+generic : sockaddr
+		+ipv4 : sockaddr_in
+		+ipv6 : sockaddr_in6
+		+as_sockaddr() : struct sockaddr* {query}
+		+port() : uint16_t {query}
+		+set_port(uint16_t) : void
+		+sockaddr_len() : zmq_socklen_t {query}
+	}
+
 }
 
-class address_t{}
 
-address_t o-- protocol_name 
 
-tcp_address_t --|> address_t
-ipc_address_t --|> address_t
 
-class ctx_t;
+
+/' Inheritance relationships '/
+
+zmq.dealer_t <|-- zmq.req_t
+
+
+
+zmq.i_mailbox <|-- zmq.mailbox_safe_t
+
+
+zmq.i_mailbox <|-- zmq.mailbox_t
+
+
+zmq.i_pipe_events <|-- zmq.session_base_t
+
+
+zmq.i_pipe_events <|-- zmq.socket_base_t
+
+
+zmq.i_poll_events <|-- zmq.io_object_t
+
+
+zmq.i_poll_events <|-- zmq.io_thread_t
+
+
+zmq.i_poll_events <|-- zmq.reaper_t
+
+
+zmq.i_poll_events <|-- zmq.socket_base_t
+
+
+zmq.io_object_t <|-- zmq.norm_engine_t
+
+
+zmq.io_object_t <|-- zmq.pgm_receiver_t
+
+
+zmq.io_object_t <|-- zmq.pgm_sender_t
+
+
+zmq.io_object_t <|-- zmq.session_base_t
+
+
+zmq.io_object_t <|-- zmq.stream_engine_base_t
+
+
+zmq.io_object_t <|-- zmq.stream_listener_base_t
+
+
+zmq.io_object_t <|-- zmq.udp_engine_t
+
+
+
+
+zmq.object_t <|-- zmq.io_thread_t
+
+
+zmq.object_t <|-- zmq.own_t
+
+
+zmq.object_t <|-- zmq.pipe_t
+
+
+zmq.object_t <|-- zmq.reaper_t
+
+
+zmq.own_t <|-- zmq.session_base_t
+
+
+zmq.own_t <|-- zmq.socket_base_t
+
+
+zmq.own_t <|-- zmq.stream_listener_base_t
+
+
+zmq.poller_base_t <|-- zmq.pollset_t
+
+
+zmq.poller_base_t <|-- zmq.worker_poller_base_t
+
+
+zmq.router_t <|-- zmq.rep_t
+
+
+zmq.server_t <|-- zmq.peer_t
+
+
+zmq.socket_base_t <|-- zmq.channel_t
+
+
+zmq.socket_base_t <|-- zmq.client_t
+
+
+zmq.socket_base_t <|-- zmq.dealer_t
+
+
+
+zmq.socket_base_t <|-- zmq.gather_t
+
+
+zmq.socket_base_t <|-- zmq.pair_t
+
+
+zmq.socket_base_t <|-- zmq.pull_t
+
+
+zmq.socket_base_t <|-- zmq.push_t
+
+
+
+
+zmq.socket_base_t <|-- zmq.xpub_t
+
+
+zmq.socket_base_t <|-- zmq.xsub_t
+
+
+
+zmq.stream_listener_base_t <|-- zmq.ipc_listener_t
+
+
+zmq.stream_listener_base_t <|-- zmq.tcp_listener_t
+
+
+zmq.stream_listener_base_t <|-- zmq.tipc_listener_t
+
+
+zmq.stream_listener_base_t <|-- zmq.vmci_listener_t
+
+
+zmq.stream_listener_base_t <|-- zmq.ws_listener_t
+
+
+zmq.thread_ctx_t <|-- zmq.ctx_t
+
+
+zmq.worker_poller_base_t <|-- zmq.devpoll_t
+
+
+zmq.worker_poller_base_t <|-- zmq.epoll_t
+
+
+zmq.worker_poller_base_t <|-- zmq.kqueue_t
+
+
+zmq.worker_poller_base_t <|-- zmq.poll_t
+
+
+zmq.worker_poller_base_t <|-- zmq.select_t
+
+
+
+zmq.xpub_t <|-- zmq.pub_t
+
+
+zmq.xsub_t <|-- zmq.sub_t
+
+
+
+
+
+
+/' Aggregation relationships '/
+
+
+
+zmq.client_t *-- zmq.fq_t
+
+
+zmq.client_t *-- zmq.lb_t
+
+
+
+zmq.ctx_t o-- zmq.i_mailbox
+
+
+
+
+zmq.dealer_t *-- zmq.fq_t
+
+
+zmq.dealer_t *-- zmq.lb_t
+
+
+
+
+zmq.item_t o-- zmq.socket_base_t
+
+
+zmq.mailbox_safe_t o-- zmq.signaler_t
+
+
+zmq.mailbox_t *-- zmq.signaler_t
+
+
+
+zmq.own_t *-- zmq.options_t
+
+
+zmq.own_t o-- zmq.own_t
+
+
+zmq.pipe_t *-- zmq.endpoint_uri_pair_t
+
+
+zmq.pipe_t o-- zmq.i_pipe_events
+
+
+zmq.pipe_t *-- zmq.msg_t
+
+
+
+zmq.poller_base_t *-- zmq.timers_t
+
+
+zmq.pollset_t *-- zmq.thread_ctx_t
+
+
+zmq.pollset_t *-- zmq.thread_t
+
+
+
+zmq.pull_t *-- zmq.fq_t
+
+
+zmq.push_t *-- zmq.lb_t
+
+
+zmq.server_t *-- zmq.fq_t
+
+
+zmq.session_base_t o-- zmq.address_t
+
+
+zmq.session_base_t o-- zmq.i_engine
+
+
+zmq.session_base_t o-- zmq.socket_base_t
+
+
+zmq.socket_base_t o-- zmq.i_mailbox
+
+
+zmq.socket_base_t o-- zmq.signaler_t
+
+
+zmq.socket_poller_t o-- zmq.signaler_t
+
+
+zmq.socks_connecter_t o-- zmq.address_t
+
+
+zmq.tcp_address_mask_t *-- zmq.ip_addr_t
+
+
+zmq.tcp_address_t *-- zmq.ip_addr_t
+
+
+zmq.tcp_listener_t *-- zmq.tcp_address_t
+
+
+
+zmq.udp_address_t  *-- zmq.ip_addr_t
+
+
+zmq.udp_engine_t o-- zmq.address_t
+
+
+zmq.udp_engine_t *-- zmq.endpoint_uri_pair_t
+
+
+zmq.udp_engine_t *-- zmq.options_t
+
+
+zmq.udp_engine_t o-- zmq.session_base_t
+
+zmq.worker_poller_base_t *-- zmq.thread_ctx_t
+
+
+zmq.worker_poller_base_t *-- zmq.thread_t
+
+
+zmq.xpub_t *-- zmq.dist_t
+
+
+zmq.xpub_t o-- zmq.metadata_t
+
+
+zmq.xpub_t *-- zmq.msg_t
+
+
+zmq.xsub_t *-- zmq.dist_t
+
+
+zmq.xsub_t *-- zmq.fq_t
+
+
+zmq.xsub_t *-- zmq.msg_t
+
+
+zmq.xsub_t *-- zmq.radix_tree_t
+
+
+zmq.xsub_t *-- zmq.trie_with_size_t
+
+
+
+/' Nested objects '/
+
 
 @enduml

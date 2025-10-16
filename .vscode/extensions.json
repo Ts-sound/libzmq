@@ -1,0 +1,18 @@
+{
+    "recommendations": [
+        "jebbs.plantuml",
+        "johnstoncode.svn-scm",
+        "gruntfuggly.todo-tree",
+        "oorzc.mind-map",
+        "ms-vscode.cpptools",
+        "mhutchie.git-graph",
+        "tht13.html-preview-vscode",
+        "zainchen.json",
+        "hediet.vscode-drawio",
+        "shd101wyy.markdown-preview-enhanced",
+        "redhat.vscode-xml",
+        "redhat.vscode-yaml",
+        "ms-python.python",
+        "tomoyukim.vscode-mermaid-editor"
+    ]
+}
